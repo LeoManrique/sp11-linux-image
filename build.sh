@@ -6,8 +6,8 @@ ROOTFS_URL=http://os.archlinuxarm.org/os/ArchLinuxARM-aarch64-latest.tar.gz
 DISK_IMAGE_NAME=arch-linux-arm-sp11.img
 DISK_IMAGE_SIZE_MB=6144
 
-KERNEL_GIT_REPO=https://github.com/dwhinham/kernel-surface-pro-11
-KERNEL_GIT_BRANCH=wip/x1e80100-6.17-sp11
+KERNEL_GIT_REPO=https://github.com/LeoManrique/sp11-linux-kernel
+KERNEL_GIT_BRANCH=x1e80100-7.1-rc1-sp11
 
 # If "rc" in the branch name then take the config from the ALARM -rc package
 if [[ $KERNEL_GIT_BRANCH == *rc* ]]; then
