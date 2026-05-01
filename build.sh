@@ -33,6 +33,7 @@ function check_arch {
 
 function check_tools {
 	local tools=(
+		bc
 		bsdtar
 		curl
 		mkfs.fat
