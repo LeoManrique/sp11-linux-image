@@ -4,7 +4,7 @@ set -e
 
 ROOTFS_URL=http://os.archlinuxarm.org/os/ArchLinuxARM-aarch64-latest.tar.gz
 DISK_IMAGE_NAME=arch-linux-arm-sp11.img
-DISK_IMAGE_SIZE_MB=6144
+DISK_IMAGE_SIZE_MB=16384
 
 KERNEL_GIT_REPO=https://github.com/LeoManrique/sp11-linux-kernel
 KERNEL_GIT_BRANCH=x1e80100-7.1-rc1-sp11
@@ -126,20 +126,78 @@ function arch_setup {
 			iwd \
 			jq \
 			linux-firmware-qcom \
+			ntfs-3g \
+			ntfsprogs \
+			dosfstools \
+			gnome \
+			gdm \
+			noto-fonts \
+			noto-fonts-emoji \
+			ttf-jetbrains-mono-nerd \
+			bluez \
+			bluez-utils \
+			networkmanager \
 			python \
 			sudo \
 			terminus-font
 
 		pacman -Scc --noconfirm
 
-		# Allow iwd to handle DHCP and routing setup
-		mkdir /etc/iwd
+		mkdir -p /etc/iwd
 		cat <<-EOF2 > /etc/iwd/main.conf
 			[General]
-			EnableNetworkConfiguration=true
+			EnableNetworkConfiguration=false
 		EOF2
 
-		systemctl enable iwd
+		mkdir -p /etc/NetworkManager/conf.d
+		cat <<-EOF2 > /etc/NetworkManager/conf.d/iwd.conf
+			[device]
+			wifi.backend=iwd
+		EOF2
+
+		ln -sf /run/systemd/resolve/stub-resolv.conf /etc/resolv.conf
+
+		systemctl enable NetworkManager
+		systemctl disable NetworkManager-wait-online.service
+		systemctl enable gdm
+		systemctl enable bluetooth
+		systemctl mask tpm2.target
+		systemctl mask dev-tpmrm0.device
+		systemctl mask iio-sensor-proxy
+		systemctl mask cups.service
+		systemctl mask cups-browsed.service
+
+		cat > /usr/local/bin/qcom-bt-setup.sh << 'BTEOF'
+#!/bin/bash
+for i in $(seq 1 30); do
+    if dmesg | grep -q "QCA setup on UART is completed"; then
+        echo "QCA firmware ready on attempt $i"
+        break
+    fi
+    echo "Waiting for QCA firmware... attempt $i"
+    sleep 2
+done
+RESULT=$(script -qc "btmgmt --index 0 public-addr 00:03:7F:12:9C:AB" /dev/null 2>&1)
+echo "btmgmt result: $RESULT"
+exit 0
+BTEOF
+		chmod +x /usr/local/bin/qcom-bt-setup.sh
+
+		cat > /etc/systemd/system/qcom-bt-addr.service << 'SVCEOF'
+[Unit]
+Description=Set Qualcomm Bluetooth MAC address
+Before=bluetooth.service
+
+[Service]
+Type=oneshot
+ExecStart=/usr/local/bin/qcom-bt-setup.sh
+RemainAfterExit=yes
+TimeoutStartSec=120
+
+[Install]
+WantedBy=bluetooth.service
+SVCEOF
+		systemctl enable qcom-bt-addr.service
 
 		echo FONT=ter-132n >> /etc/vconsole.conf
 
@@ -151,6 +209,10 @@ function arch_setup {
 		mkinitcpio -k $kversion -g /boot/initramfs-$kversion.img -v
 		grub-install --target=arm64-efi --efi-directory=/mnt/efi --removable
 		grub-mkconfig > /boot/grub/grub.cfg
+
+		useradd -m -G wheel -s /bin/bash leo
+		echo "leo:leo" | chpasswd
+		echo '%wheel ALL=(ALL:ALL) ALL' >> /etc/sudoers
 
 		# This process will prevent unmounting after exiting the chroot if it's left dangling
 		killall -wv gpg-agent
